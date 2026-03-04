@@ -1,5 +1,8 @@
 # wrk
 
+[![CI](https://github.com/superfuture-dev/wrk/actions/workflows/ci.yml/badge.svg)](https://github.com/superfuture-dev/wrk/actions/workflows/ci.yml)
+[![Release](https://github.com/superfuture-dev/wrk/actions/workflows/release.yml/badge.svg)](https://github.com/superfuture-dev/wrk/actions/workflows/release.yml)
+
 `wrk` is a small Rust CLI for keeping a daily markdown work log.
 
 The default path is optimized for low friction:
