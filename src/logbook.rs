@@ -45,6 +45,12 @@ pub struct LintProblem {
     pub message: String,
 }
 
+#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+pub enum EmojiRenderMode {
+    Emoji,
+    Shortcodes,
+}
+
 pub fn today() -> NaiveDate {
     Local::now().date_naive()
 }
@@ -221,18 +227,27 @@ pub fn lint_repository(root: &Path, config: &Config) -> Result<Vec<LintProblem>>
     Ok(problems)
 }
 
-pub fn format_entries(entries: &[Entry], sort: Option<SortMode>, include_all: bool) -> String {
+pub fn format_entries(
+    entries: &[Entry],
+    sort: Option<SortMode>,
+    include_all: bool,
+    emoji_mode: EmojiRenderMode,
+) -> String {
     if entries.is_empty() {
         return "No entries found.".to_owned();
     }
 
     match sort {
-        Some(SortMode::Project) => format_entries_by_project(entries, include_all),
-        None => format_entries_by_day(entries, include_all),
+        Some(SortMode::Project) => format_entries_by_project(entries, include_all, emoji_mode),
+        None => format_entries_by_day(entries, include_all, emoji_mode),
     }
 }
 
-pub fn format_search_results(entries: &[Entry], include_all: bool) -> String {
+pub fn format_search_results(
+    entries: &[Entry],
+    include_all: bool,
+    emoji_mode: EmojiRenderMode,
+) -> String {
     if entries.is_empty() {
         return "No entries found.".to_owned();
     }
@@ -244,11 +259,11 @@ pub fn format_search_results(entries: &[Entry], include_all: bool) -> String {
             entry.timestamp,
             entry.project.as_deref(),
             &entry.kind,
-            &entry.summary,
+            &render_text(&entry.summary, emoji_mode),
         ));
         if include_all {
             for detail in &entry.details {
-                lines.push(format!("  {}", detail));
+                lines.push(format!("  {}", render_text(detail, emoji_mode)));
             }
         }
     }
@@ -722,6 +737,13 @@ fn render_entry_line_with_date(
     .replace("  :", " :")
 }
 
+fn render_text(text: &str, emoji_mode: EmojiRenderMode) -> String {
+    match emoji_mode {
+        EmojiRenderMode::Emoji => expand_emoji_shortcodes(text),
+        EmojiRenderMode::Shortcodes => collapse_emojis_to_shortcodes(text),
+    }
+}
+
 fn log_path(root: &Path, date: NaiveDate) -> PathBuf {
     root.join(format!("{:04}", date.year()))
         .join(format!("{:02}", date.month()))
@@ -769,7 +791,32 @@ fn expand_emoji_shortcodes(line: &str) -> String {
         .into_owned()
 }
 
-fn format_entries_by_day(entries: &[Entry], include_all: bool) -> String {
+fn collapse_emojis_to_shortcodes(line: &str) -> String {
+    static EMOJI_SHORTCODES: OnceLock<Vec<(&'static str, &'static str)>> = OnceLock::new();
+    let mappings = EMOJI_SHORTCODES.get_or_init(|| {
+        let mut mappings: Vec<(&'static str, &'static str)> = emojis::iter()
+            .filter_map(|emoji| {
+                emoji
+                    .shortcode()
+                    .map(|shortcode| (emoji.as_str(), shortcode))
+            })
+            .collect();
+        mappings.sort_by(|left, right| right.0.len().cmp(&left.0.len()).then(left.1.cmp(right.1)));
+        mappings
+    });
+
+    let mut rendered = line.to_owned();
+    for (emoji, shortcode) in mappings {
+        rendered = rendered.replace(emoji, &format!(":{shortcode}:"));
+    }
+    rendered
+}
+
+fn format_entries_by_day(
+    entries: &[Entry],
+    include_all: bool,
+    emoji_mode: EmojiRenderMode,
+) -> String {
     let mut grouped: BTreeMap<NaiveDate, Vec<&Entry>> = BTreeMap::new();
     for entry in entries {
         grouped.entry(entry.date).or_default().push(entry);
@@ -784,13 +831,13 @@ fn format_entries_by_day(entries: &[Entry], include_all: bool) -> String {
                 entry.timestamp,
                 entry.project.as_deref(),
                 &entry.kind,
-                &entry.summary,
+                &render_text(&entry.summary, emoji_mode),
             ));
             block.push('\n');
             if include_all {
                 for detail in &entry.details {
                     block.push_str("  ");
-                    block.push_str(detail);
+                    block.push_str(&render_text(detail, emoji_mode));
                     block.push('\n');
                 }
             }
@@ -801,7 +848,11 @@ fn format_entries_by_day(entries: &[Entry], include_all: bool) -> String {
     blocks.join("\n\n")
 }
 
-fn format_entries_by_project(entries: &[Entry], include_all: bool) -> String {
+fn format_entries_by_project(
+    entries: &[Entry],
+    include_all: bool,
+    emoji_mode: EmojiRenderMode,
+) -> String {
     let mut sorted = entries.to_vec();
     sorted.sort_by(|left, right| {
         project_key(left)
@@ -827,13 +878,13 @@ fn format_entries_by_project(entries: &[Entry], include_all: bool) -> String {
                 entry.timestamp,
                 entry.project.as_deref(),
                 &entry.kind,
-                &entry.summary,
+                &render_text(&entry.summary, emoji_mode),
             ));
             block.push('\n');
             if include_all {
                 for detail in &entry.details {
                     block.push_str("  ");
-                    block.push_str(detail);
+                    block.push_str(&render_text(detail, emoji_mode));
                     block.push('\n');
                 }
             }
@@ -936,6 +987,22 @@ mod tests {
         let config = test_config(&root);
         let entry = build_new_entry(&config, None, None, "Lunch :taco:").unwrap();
         assert_eq!(entry.summary, "Lunch 🌮");
+    }
+
+    #[test]
+    fn renders_shortcodes_as_emojis_by_default() {
+        assert_eq!(
+            render_text("Lunch :taco:", EmojiRenderMode::Emoji),
+            "Lunch 🌮"
+        );
+    }
+
+    #[test]
+    fn renders_emojis_as_shortcodes_when_requested() {
+        assert_eq!(
+            render_text("Lunch 🌮", EmojiRenderMode::Shortcodes),
+            "Lunch :taco:"
+        );
     }
 
     #[test]

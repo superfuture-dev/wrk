@@ -96,6 +96,9 @@ pub struct ViewArgs {
 
     #[arg(short = 'a', long = "all")]
     pub all: bool,
+
+    #[arg(long)]
+    pub shortcodes: bool,
 }
 
 #[derive(Debug, Clone, Args)]
@@ -105,6 +108,9 @@ pub struct SearchArgs {
 
     #[arg(short = 'a', long = "all")]
     pub all: bool,
+
+    #[arg(long)]
+    pub shortcodes: bool,
 }
 
 #[derive(Debug, Clone, Args)]
@@ -114,6 +120,9 @@ pub struct ProjectArgs {
 
     #[arg(short = 'a', long = "all")]
     pub all: bool,
+
+    #[arg(long)]
+    pub shortcodes: bool,
 }
 
 #[derive(Debug, Clone, Args)]

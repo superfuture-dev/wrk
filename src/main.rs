@@ -11,9 +11,10 @@ use clap::Parser;
 use crate::cli::{Command, CommandCli, LogCli, RootHelpCli};
 use crate::config::Config;
 use crate::logbook::{
-    amend_last_entry, append_entry, build_new_entry, collect_entry_input, collect_period_entries,
-    collect_project_entries, format_entries, format_search_results, lint_repository, month_range,
-    open_in_editor, print_emoji_section, search_entries, today, work_week_range, year_range,
+    EmojiRenderMode, amend_last_entry, append_entry, build_new_entry, collect_entry_input,
+    collect_period_entries, collect_project_entries, format_entries, format_search_results,
+    lint_repository, month_range, open_in_editor, print_emoji_section, search_entries, today,
+    work_week_range, year_range,
 };
 
 fn main() {
@@ -43,33 +44,51 @@ fn run() -> Result<()> {
             Command::Day(args) => {
                 let date = args.date.unwrap_or_else(today);
                 let entries = collect_period_entries(&config.log_dir, date, date)?;
-                println!("{}", format_entries(&entries, args.sort, args.all));
+                println!(
+                    "{}",
+                    format_entries(&entries, args.sort, args.all, emoji_mode(args.shortcodes))
+                );
             }
             Command::Week(args) => {
                 let anchor = args.date.unwrap_or_else(today);
                 let (start, end) = work_week_range(anchor);
                 let entries = collect_period_entries(&config.log_dir, start, end)?;
-                println!("{}", format_entries(&entries, args.sort, args.all));
+                println!(
+                    "{}",
+                    format_entries(&entries, args.sort, args.all, emoji_mode(args.shortcodes))
+                );
             }
             Command::Month(args) => {
                 let anchor = args.date.unwrap_or_else(today);
                 let (start, end) = month_range(anchor)?;
                 let entries = collect_period_entries(&config.log_dir, start, end)?;
-                println!("{}", format_entries(&entries, args.sort, args.all));
+                println!(
+                    "{}",
+                    format_entries(&entries, args.sort, args.all, emoji_mode(args.shortcodes))
+                );
             }
             Command::Year(args) => {
                 let anchor = args.date.unwrap_or_else(today);
                 let (start, end) = year_range(anchor)?;
                 let entries = collect_period_entries(&config.log_dir, start, end)?;
-                println!("{}", format_entries(&entries, args.sort, args.all));
+                println!(
+                    "{}",
+                    format_entries(&entries, args.sort, args.all, emoji_mode(args.shortcodes))
+                );
             }
             Command::Search(args) => {
                 let entries = search_entries(&config.log_dir, &args.pattern)?;
-                println!("{}", format_search_results(&entries, args.all));
+                println!(
+                    "{}",
+                    format_search_results(&entries, args.all, emoji_mode(args.shortcodes))
+                );
             }
             Command::Project(args) => {
                 let entries = collect_project_entries(&config.log_dir, &args.project)?;
-                println!("{}", format_entries(&entries, None, args.all));
+                println!(
+                    "{}",
+                    format_entries(&entries, None, args.all, emoji_mode(args.shortcodes))
+                );
             }
             Command::Edit(args) => {
                 let date = args.date.unwrap_or_else(today);
@@ -173,11 +192,21 @@ fn is_root_version(args: &[OsString]) -> bool {
     args.len() == 1 && matches!(args[0].to_string_lossy().as_ref(), "-V" | "--version")
 }
 
+fn emoji_mode(shortcodes: bool) -> EmojiRenderMode {
+    if shortcodes {
+        EmojiRenderMode::Shortcodes
+    } else {
+        EmojiRenderMode::Emoji
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::ffi::OsString;
 
-    use super::{is_root_help, is_root_version, should_parse_command};
+    use crate::logbook::EmojiRenderMode;
+
+    use super::{emoji_mode, is_root_help, is_root_version, should_parse_command};
 
     #[test]
     fn parses_known_subcommands_before_log_mode() {
@@ -218,5 +247,11 @@ mod tests {
             OsString::from("day"),
             OsString::from("--version")
         ]));
+    }
+
+    #[test]
+    fn emoji_mode_defaults_to_emoji_output() {
+        assert!(matches!(emoji_mode(false), EmojiRenderMode::Emoji));
+        assert!(matches!(emoji_mode(true), EmojiRenderMode::Shortcodes));
     }
 }
