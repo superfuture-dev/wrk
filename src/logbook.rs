@@ -1,7 +1,7 @@
 use std::cmp::Ordering;
 use std::collections::BTreeMap;
 use std::fs;
-use std::io::{self, IsTerminal, Read};
+use std::io::{self, BufRead, IsTerminal, Read, Write};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::OnceLock;
@@ -12,7 +12,7 @@ use regex::{Captures, Regex};
 use walkdir::WalkDir;
 
 use crate::cli::{EmojiSection, SortMode};
-use crate::config::Config;
+use crate::config::{Config, resolve_editor_from_env};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Entry {
@@ -313,21 +313,31 @@ pub fn year_range(anchor: NaiveDate) -> Result<(NaiveDate, NaiveDate)> {
 }
 
 fn collect_interactive_entry() -> Result<Option<String>> {
-    use rustyline::DefaultEditor;
-    use rustyline::error::ReadlineError;
-
     eprintln!("Enter your log entry. Press Ctrl-D on an empty prompt to save. Ctrl-C cancels.");
-
-    let mut editor = DefaultEditor::new().context("failed to start interactive editor")?;
     let mut lines = Vec::new();
+    let stdin = io::stdin();
+    let mut handle = stdin.lock();
+    let mut stdout = io::stdout();
 
     loop {
         let prompt = if lines.is_empty() { "wrk> " } else { "... " };
-        match editor.readline(prompt) {
-            Ok(line) => lines.push(line),
-            Err(ReadlineError::Eof) => break,
-            Err(ReadlineError::Interrupted) => bail!("interactive entry cancelled"),
-            Err(error) => return Err(error).context("failed to read interactive input"),
+        stdout
+            .write_all(prompt.as_bytes())
+            .context("failed to write prompt")?;
+        stdout.flush().context("failed to flush prompt")?;
+
+        let mut line = String::new();
+        match handle.read_line(&mut line) {
+            Ok(0) => break,
+            Ok(_) => {
+                lines.push(line.trim_end_matches(['\n', '\r']).to_owned());
+            }
+            Err(error) => {
+                if error.kind() == io::ErrorKind::Interrupted {
+                    bail!("interactive entry cancelled");
+                }
+                return Err(error).context("failed to read interactive input");
+            }
         }
     }
 
@@ -627,10 +637,11 @@ fn update_latest_symlink(root: &Path, target: &Path) -> Result<()> {
 fn launch_editor(config: &Config, path: &Path, line: usize) -> Result<()> {
     let editor = config
         .editor
-        .as_deref()
+        .clone()
+        .or_else(resolve_editor_from_env)
         .ok_or_else(|| anyhow!("set `editor` in ~/.wrkrc or define $EDITOR/$VISUAL"))?;
     let mut parts =
-        shlex::split(editor).ok_or_else(|| anyhow!("failed to parse editor command"))?;
+        shlex::split(&editor).ok_or_else(|| anyhow!("failed to parse editor command"))?;
     if parts.is_empty() {
         bail!("editor command is empty");
     }

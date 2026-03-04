@@ -115,11 +115,18 @@ fn home_dir() -> PathBuf {
     dirs::home_dir().unwrap_or_else(|| PathBuf::from("~"))
 }
 
-fn resolve_editor_from_env() -> Option<String> {
-    env::var("VISUAL")
-        .ok()
+pub fn resolve_editor_from_env() -> Option<String> {
+    resolve_editor(
+        env::var("EDITOR").ok().as_deref(),
+        env::var("VISUAL").ok().as_deref(),
+    )
+}
+
+fn resolve_editor(editor: Option<&str>, visual: Option<&str>) -> Option<String> {
+    editor
         .filter(|value| !value.is_empty())
-        .or_else(|| env::var("EDITOR").ok().filter(|value| !value.is_empty()))
+        .or_else(|| visual.filter(|value| !value.is_empty()))
+        .map(ToOwned::to_owned)
 }
 
 fn expand_tilde(raw: &str) -> Result<PathBuf> {
@@ -167,5 +174,12 @@ mod tests {
     fn rejects_bad_type_tokens() {
         let err = validate_kind("status update").unwrap_err();
         assert!(err.to_string().contains("cannot contain whitespace"));
+    }
+
+    #[test]
+    fn prefers_editor_over_visual() {
+        assert_eq!(resolve_editor(Some("nvim"), Some("zed")).as_deref(), Some("nvim"));
+        assert_eq!(resolve_editor(None, Some("zed")).as_deref(), Some("zed"));
+        assert_eq!(resolve_editor(None, None).as_deref(), None);
     }
 }

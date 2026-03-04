@@ -162,3 +162,29 @@ pub enum EmojiSection {
     Symbols,
     Flags,
 }
+
+#[cfg(test)]
+mod tests {
+    use clap::Parser;
+
+    use super::{CommandCli, LogCli};
+
+    #[test]
+    fn log_cli_captures_plain_message() {
+        let cli = LogCli::parse_from(["wrk", "Some message"]);
+        assert_eq!(cli.message, vec!["Some message"]);
+    }
+
+    #[test]
+    fn log_cli_captures_message_after_flags() {
+        let cli = LogCli::parse_from(["wrk", "-p", "api", "Some message"]);
+        assert_eq!(cli.project.as_deref(), Some("api"));
+        assert_eq!(cli.message, vec!["Some message"]);
+    }
+
+    #[test]
+    fn command_cli_parses_subcommand() {
+        let cli = CommandCli::parse_from(["wrk", "day"]);
+        assert!(matches!(cli.command, super::Command::Day(_)));
+    }
+}

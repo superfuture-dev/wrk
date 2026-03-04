@@ -30,6 +30,10 @@ fn run() -> Result<()> {
         println!();
         return Ok(());
     }
+    if is_root_version(&raw_args[1..]) {
+        println!("{}", RootHelpCli::command().render_version());
+        return Ok(());
+    }
 
     if should_parse_command(&raw_args[1..]) {
         let cli = CommandCli::parse_from(&raw_args);
@@ -165,11 +169,15 @@ fn is_root_help(args: &[OsString]) -> bool {
     args.len() == 1 && matches!(args[0].to_string_lossy().as_ref(), "-h" | "--help")
 }
 
+fn is_root_version(args: &[OsString]) -> bool {
+    args.len() == 1 && matches!(args[0].to_string_lossy().as_ref(), "-V" | "--version")
+}
+
 #[cfg(test)]
 mod tests {
     use std::ffi::OsString;
 
-    use super::{is_root_help, should_parse_command};
+    use super::{is_root_help, is_root_version, should_parse_command};
 
     #[test]
     fn parses_known_subcommands_before_log_mode() {
@@ -200,6 +208,15 @@ mod tests {
         assert!(!is_root_help(&[
             OsString::from("day"),
             OsString::from("--help")
+        ]));
+    }
+
+    #[test]
+    fn detects_root_version() {
+        assert!(is_root_version(&[OsString::from("--version")]));
+        assert!(!is_root_version(&[
+            OsString::from("day"),
+            OsString::from("--version")
         ]));
     }
 }
