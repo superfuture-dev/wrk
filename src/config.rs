@@ -178,7 +178,10 @@ mod tests {
 
     #[test]
     fn prefers_editor_over_visual() {
-        assert_eq!(resolve_editor(Some("nvim"), Some("zed")).as_deref(), Some("nvim"));
+        assert_eq!(
+            resolve_editor(Some("nvim"), Some("zed")).as_deref(),
+            Some("nvim")
+        );
         assert_eq!(resolve_editor(None, Some("zed")).as_deref(), Some("zed"));
         assert_eq!(resolve_editor(None, None).as_deref(), None);
     }
