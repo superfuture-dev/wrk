@@ -53,9 +53,10 @@ jobs:
 
       - name: Package release archive
         run: |
-          cargo build --locked --release
+          TARGET_TRIPLE="$(rustc -vV | sed -n 's/^host: //p')"
+          cargo build --locked --release --target "$TARGET_TRIPLE"
           ${{ matrix.python }} scripts/package_release.py \
-            --target "$(rustc -vV | sed -n 's/^host: //p')" \
+            --target "$TARGET_TRIPLE" \
             --version "${GITHUB_REF_NAME#v}" \
             --name wrk \
             --dist-dir dist
